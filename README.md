@@ -39,6 +39,15 @@ test -f /www/wwwroot/ppanel/config/ppanel.yaml
 cp -a /path/to/existing/ppanel-config/. /www/wwwroot/ppanel/config/
 ```
 
+仓库内的 [ppanel.yaml.example](ppanel.yaml.example) 是完整配置模板。只有在配置目录还没有 `ppanel.yaml` 时才复制它，复制后必须修改数据库连接、密码和 `JwtAuth.AccessSecret`：
+
+```bash
+cp -n ppanel.yaml.example /www/wwwroot/ppanel/config/ppanel.yaml
+vi /www/wwwroot/ppanel/config/ppanel.yaml
+```
+
+示例文件中的凭据仅用于示例，不能直接用于生产环境。
+
 配置至少需要包含已配置的数据库地址和 JwtAuth.AccessSecret。当前镜像不负责首次安装页面，也不支持启动时才创建数据库配置。
 
 可以继续使用原项目的配置字段，例如：
@@ -229,7 +238,7 @@ docker compose up -d --force-recreate
 镜像推送成功后提交 upstream.lock.json
 ```
 
-如果上游下载、前端兼容性补丁或 Docker 构建失败，工作流会失败，不会提交新的锁文件，也不会更新 latest。自动提交使用 GitHub Actions 自己的 Token，并带有 [skip ci]，不会形成循环构建。
+如果上游下载、前端兼容性补丁、Docker 构建或容器集成测试失败，工作流会失败，不会提交新的锁文件，也不会更新 latest。自动提交使用 GitHub Actions 自己的 Token，并带有 [skip ci]，不会形成循环构建。
 
 服务器只需要拉取镜像，不需要在服务器上安装 Bun、Node、Python 或编译后端：
 
