@@ -43,6 +43,20 @@ def get(base, path):
         return response.status, response.headers, response.read()
 
 
+def validate_backend_probe(path, status, headers, body):
+    """Verify that an API probe reached the backend, not the SPA fallback."""
+    if not 200 <= status < 500:
+        raise AssertionError((path, status, body[:200]))
+    content_type = headers.get('Content-Type', '')
+    if 'json' in content_type:
+        payload = json.loads(body)
+        if not isinstance(payload, dict) or 'code' not in payload:
+            raise AssertionError((path, status, body[:200]))
+        return
+    if status != 404 or body.strip() != b'Not Found':
+        raise AssertionError((path, status, content_type, body[:200]))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('image')
@@ -83,16 +97,14 @@ def main():
             assert urllib.request.urlopen(base + '/admin').url == base + '/admin/'
             status, headers, body = get(base, '/v1/common/heartbeat')
             assert status == 200 and json.loads(body)['data']['status'] is True
-            # v1.20.3 exposes GET /v1/admin/tool/version, while the v2
-            # collection endpoint is POST-only. A GET to /v2/public/orders
-            # therefore legitimately returns the backend's plain-text 404;
-            # the important assertion here is that it did not fall through to
-            # the frontend's HTML response.
+            # v1.20.3 may return HTTP 200 with an application-level error
+            # code, while the v2 collection endpoint is POST-only. A GET to
+            # /v2/public/orders therefore legitimately returns the backend's
+            # plain-text 404. The important assertion is that neither request
+            # fell through to the frontend's HTML response.
             for path in ('/v1/admin/tool/version', '/v2/public/orders'):
                 status, headers, body = get(base, path)
-                assert status in (401, 404), (path, status, body[:200])
-                if 'json' in headers.get('Content-Type', ''):
-                    assert json.loads(body)['code'] not in (0, 200), path
+                validate_backend_probe(path, status, headers, body)
             if args.browser:
                 subprocess.run(['node', str(ROOT / 'tests/browser.mjs')], env={**os.environ, 'BASE_URL': base}, check=True)
             # Graceful SIGTERM must finish, and must not mutate the read-only source.

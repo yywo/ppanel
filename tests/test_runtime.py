@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / 'runtime'), str(ROOT / 'scripts')]
 import yaml
 from entrypoint import prepare_config
+from test_container import validate_backend_probe
 from update import extract
 
 
@@ -72,6 +73,24 @@ class ArchiveTests(unittest.TestCase):
                     tar.addfile(item, None if symlink else io.BytesIO(b'x'))
                 with self.assertRaises(ValueError):
                     extract(archive, Path(temp) / 'output')
+
+
+class ContainerProbeTests(unittest.TestCase):
+    def test_accepts_backend_http_success_with_application_error(self):
+        validate_backend_probe(
+            '/v1/admin/tool/version',
+            200,
+            {'Content-Type': 'application/json'},
+            b'{"code":40002,"msg":"User token is empty"}',
+        )
+
+    def test_accepts_backend_plain_text_not_found(self):
+        validate_backend_probe(
+            '/v2/public/orders',
+            404,
+            {'Content-Type': 'text/plain; charset=utf-8'},
+            b'Not Found',
+        )
 
 
 if __name__ == '__main__':
