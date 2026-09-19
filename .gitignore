@@ -1,0 +1,9 @@
+.upstream/
+.tools/
+.build/
+.cache/
+__pycache__/
+*.pyc
+.env
+test-results/
+tests/node_modules/

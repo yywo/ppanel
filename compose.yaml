@@ -1,0 +1,22 @@
+services:
+  ppanel:
+    image: ${PPANEL_IMAGE:?Set PPANEL_IMAGE to your tested local image tag}
+    container_name: ppanel-service
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - type: bind
+        source: ${PPANEL_CONFIG_DIR:-/www/wwwroot/ppanel/config}
+        target: /app/etc
+        read_only: true
+        bind:
+          create_host_path: false
+    restart: always
+    stop_grace_period: 35s
+    environment:
+      TZ: Asia/Shanghai
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

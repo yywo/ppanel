@@ -1,0 +1,9 @@
+**
+!Dockerfile
+!runtime/**
+!scripts/patch_frontend.py
+!.build/backend/**
+!.build/frontend/**
+!.build/manifest.json
+.build/frontend/**/node_modules/
+.build/frontend/**/dist/
