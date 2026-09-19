@@ -56,3 +56,22 @@ The supplied Compose file preserves the production mapping
 and `restart: always`. Deploy by changing the image tag and recreating the
 container only after the new image has passed the checks above; no production
 directory is modified by the build scripts.
+
+## GitHub Actions and GHCR
+
+Every push to `main` and every `v*` tag builds the pinned `linux/amd64` image
+and publishes it to `ghcr.io/yywo/ppanel`. The same workflow can be started
+manually from the repository Actions page with **Run workflow**.
+
+The published image can be selected in Compose without rebuilding on the
+server:
+
+```bash
+export PPANEL_IMAGE=ghcr.io/yywo/ppanel:latest
+docker login ghcr.io
+docker compose pull
+docker compose up -d
+```
+
+The workflow only has read access to repository contents and package-write
+access for `GITHUB_TOKEN`; it does not deploy or change the production host.
