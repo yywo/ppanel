@@ -6,14 +6,23 @@ on:
       - main
     tags:
       - 'v*'
+  schedule:
+    # 02:17 Asia/Shanghai (18:17 UTC) every day.
+    - cron: '17 18 * * *'
   workflow_dispatch:
+    inputs:
+      refresh_upstream:
+        description: Resolve the latest stable backend and frontend releases before building
+        required: true
+        type: boolean
+        default: true
 
 concurrency:
   group: publish-ghcr-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
-  contents: read
+  contents: write
   packages: write
 
 env:
@@ -27,7 +36,12 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v4
 
+      - name: Refresh upstream versions
+        if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.refresh_upstream)
+        run: python3 scripts/update.py --resolve --backend latest --frontend latest --arch amd64
+
       - name: Prepare pinned upstream inputs
+        if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && !inputs.refresh_upstream)
         run: python3 scripts/update.py
 
       - name: Log in to GitHub Container Registry
@@ -50,6 +64,19 @@ jobs:
       - name: Set up Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Build image for container integration test
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64
+          load: true
+          tags: ppanel:ci-test
+          cache-from: type=gha,scope=ppanel
+
+      - name: Run Linux container integration test
+        run: python3 scripts/test_container.py ppanel:ci-test
+
       - name: Build and push image
         uses: docker/build-push-action@v6
         with:
@@ -61,3 +88,16 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=ppanel
           cache-to: type=gha,mode=max,scope=ppanel
+
+      - name: Commit refreshed upstream lock
+        if: (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.refresh_upstream)) && github.ref_type == 'branch'
+        run: |
+          if git diff --quiet -- upstream.lock.json; then
+            echo 'Upstream lock is unchanged.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add upstream.lock.json
+          git commit -m 'chore: refresh pinned PPanel upstream versions [skip ci]'
+          git push origin "HEAD:${GITHUB_REF_NAME}"
