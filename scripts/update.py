@@ -93,7 +93,19 @@ def download(item):
 def extract(archive, target, strip_root=False):
     target.mkdir(parents=True, exist_ok=True)
     with tarfile.open(archive, 'r:gz') as tar:
-        for member in tar.getmembers():
+        members = tar.getmembers()
+        # Upstream archives are not consistent: older backend tarballs keep files
+        # at the top level while newer ones (and frontend source tarballs) wrap
+        # everything in a single release/commit directory. Strip that wrapper
+        # automatically so callers never depend on the archive shape.
+        roots = {
+            member.name.replace('\\', '/').split('/', 1)[0]
+            for member in members
+            if member.name.replace('\\', '/').strip('/')
+        }
+        if len(roots) == 1 and not strip_root:
+            strip_root = True
+        for member in members:
             parts = member.name.replace('\\', '/').split('/')
             if strip_root:
                 parts = parts[1:]
