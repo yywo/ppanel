@@ -11,8 +11,97 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / 'runtime'), str(ROOT / 'scripts')]
 import yaml
 from entrypoint import prepare_config
+from patch_frontend import (
+    PATCH_VERSION,
+    SUBSCRIBE_FORM_CHECK,
+    SUBSCRIBE_FORM_DEFAULTS,
+    SUBSCRIBE_FORM_FILTER,
+    SUBSCRIBE_FORM_RESET,
+    SUBSCRIBE_NORMALIZE_HELPER,
+    patch,
+    patch_subscribe_form,
+)
 from test_container import validate_backend_probe
 from update import extract
+
+
+def subscribe_form_source():
+    """A minimal fixture assembled from the exact snippets the patch targets."""
+    return (
+        "const defaultValues = {\n  nodes: [],\n  node_tags: [],\n};\n\n"
+        "const form = useForm({\n  resolver: zodResolver(formSchema),\n"
+        + SUBSCRIBE_FORM_DEFAULTS
+        + "\n});\n\n"
+        "useEffect(() => {\n  form?.reset(\n"
+        + SUBSCRIBE_FORM_RESET
+        + "\n}, [form, initialValues, open]);\n\n"
+        "const node = (\n  <Checkbox\n"
+        + SUBSCRIBE_FORM_CHECK
+        + "\n    onCheckedChange={(checked) =>\n      checked\n"
+        "        ? form.setValue(field.name, [...value, item.id])\n"
+        "        : form.setValue(\n            field.name,\n"
+        + SUBSCRIBE_FORM_FILTER
+        + "\n          )\n    }\n  />\n);\n"
+    )
+
+
+SUBSCRIBE_FORM = subscribe_form_source()
+
+ADMIN_COMMON = '''export function getRedirectUrl(): string {
+  if (typeof window === "undefined") return "/dashboard";
+  const params = new URLSearchParams(window.location.search);
+  const redirect = params.get("redirect");
+  return redirect?.startsWith("/") ? redirect : "/dashboard";
+}
+
+export function setRedirectUrl(value?: string) {
+  if (value) {
+    sessionStorage.setItem("redirect-url", value);
+  }
+}
+
+export function Logout() {
+  if (!isBrowser()) return;
+  removeCookie("Authorization");
+
+  const pathname = location.pathname;
+  const hash = location.hash.slice(1);
+
+  if (!["", "/"].includes(pathname)) {
+    setRedirectUrl(pathname);
+    location.href = "/";
+    return;
+  }
+
+  if (hash && !["", "/"].includes(hash)) {
+    setRedirectUrl(hash);
+    location.href = "/";
+  }
+}
+'''
+
+COOKIES = '''  if (typeof document === "undefined") return;
+  if (typeof document === "undefined") return;
+  if (typeof document === "undefined") return;
+'''
+
+
+def frontend_tree(base):
+    """Minimal pinned-shaped frontend source tree for the fail-closed patch."""
+    paths = {
+        'apps/admin/src/sections/product/subscribe-form.tsx': SUBSCRIBE_FORM,
+        'apps/admin/src/utils/common.ts': ADMIN_COMMON,
+        'apps/admin/src/routes/__root.tsx': '<link href="/site.webmanifest" />\n',
+        'apps/admin/public/site.webmanifest': json.dumps(
+            {'start_url': '/', 'scope': '/', 'icons': [{'src': '/icon.png'}]}
+        ),
+        'packages/ui/src/lib/cookies.ts': COOKIES,
+    }
+    for name, text in paths.items():
+        path = base / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding='utf-8')
+    return base
 
 
 class ConfigTests(unittest.TestCase):
@@ -56,6 +145,63 @@ class ConfigTests(unittest.TestCase):
             (source / 'ppanel.yaml').write_text(json.dumps({'Database': {'Addr': 'db:3306'}, 'JwtAuth': {'AccessSecret': 'test'}, 'Subscribe': {'SubscribePath': '/subscribe/custom'}}))
             prepare_config(source, Path(temp) / 'run')
             self.assertIn('location = /subscribe/custom', (Path(temp) / 'run/subscribe.conf').read_text())
+
+
+class SubscribeNodePatchTests(unittest.TestCase):
+    def test_normalizes_string_node_ids_and_empty_node_groups(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = frontend_tree(Path(temp))
+            path = root / 'apps/admin/src/sections/product/subscribe-form.tsx'
+            patch_subscribe_form(root)
+            text = path.read_text(encoding='utf-8')
+            self.assertIn('result.nodes = values.nodes.map(Number).filter(Number.isFinite);', text)
+            self.assertIn('tag.trim() !== ""', text)
+            self.assertIn('checked={value.some(', text)
+            self.assertIn('Number(v) !== Number(item.id)', text)
+            self.assertNotIn('value.includes(item.id!)', text)
+            # Both the useForm defaults and the reopen/reset path normalize values.
+            self.assertEqual(text.count('normalizeNodes('), 3)
+
+    def test_is_idempotent_and_run_before_other_short_circuits(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = frontend_tree(Path(temp))
+            (root / '.ppanel-single-container-patched').write_text(PATCH_VERSION + '\n')
+            path = root / 'apps/admin/src/sections/product/subscribe-form.tsx'
+            patch(root)
+            after_first = path.read_text(encoding='utf-8')
+            self.assertIn('normalizeNodes(', after_first)
+            patch(root)
+            self.assertEqual(path.read_text(encoding='utf-8'), after_first)
+
+    def test_fails_closed_when_upstream_changes(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = frontend_tree(Path(temp))
+            path = root / 'apps/admin/src/sections/product/subscribe-form.tsx'
+            path.write_text('export default function Changed() {}\n', encoding='utf-8')
+            with self.assertRaises(RuntimeError):
+                patch_subscribe_form(root)
+
+    def test_leaves_the_file_untouched_when_a_match_is_ambiguous(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = frontend_tree(Path(temp))
+            path = root / 'apps/admin/src/sections/product/subscribe-form.tsx'
+            path.write_text(SUBSCRIBE_FORM + SUBSCRIBE_FORM, encoding='utf-8')
+            before = path.read_text(encoding='utf-8')
+            with self.assertRaises(RuntimeError):
+                patch_subscribe_form(root)
+            self.assertEqual(path.read_text(encoding='utf-8'), before)
+            self.assertFalse((root / '.ppanel-subscribe-nodes-patched').exists())
+
+    def test_skips_when_upstream_merged_the_same_helper(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = frontend_tree(Path(temp))
+            path = root / 'apps/admin/src/sections/product/subscribe-form.tsx'
+            upstream_fix = SUBSCRIBE_FORM.replace(
+                'const defaultValues = {', SUBSCRIBE_NORMALIZE_HELPER
+            )
+            path.write_text(upstream_fix, encoding='utf-8')
+            patch_subscribe_form(root)
+            self.assertEqual(path.read_text(encoding='utf-8'), upstream_fix)
 
 
 class ArchiveTests(unittest.TestCase):

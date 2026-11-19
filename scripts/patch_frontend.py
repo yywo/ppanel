@@ -14,6 +14,112 @@ def replace(path, old, new, count=1):
     path.write_text(text.replace(old, new), encoding="utf-8")
 
 
+SUBSCRIBE_FORM = "apps/admin/src/sections/product/subscribe-form.tsx"
+
+SUBSCRIBE_NORMALIZE_HELPER = '''// The backend serializes subscribe node ids as strings (e.g. ["3","4"]) and an
+// empty node group as [""]. The form schema expects numbers, and a non-empty
+// node_tags makes the backend drop nodes on save.
+function normalizeNodes(values: Record<string, any>) {
+  const result = { ...values };
+  if (Array.isArray(values.nodes)) {
+    result.nodes = values.nodes.map(Number).filter(Number.isFinite);
+  }
+  if (Array.isArray(values.node_tags)) {
+    result.node_tags = values.node_tags.filter(
+      (tag: unknown) => typeof tag === "string" && tag.trim() !== ""
+    );
+  }
+  return result;
+}
+
+const defaultValues = {'''
+
+SUBSCRIBE_FORM_DEFAULTS = '''    defaultValues: assign(
+      defaultValues,
+      shake(initialValues, (value) => value === null) as Record<string, any>
+    ),'''
+
+SUBSCRIBE_FORM_DEFAULTS_PATCHED = '''    defaultValues: assign(
+      defaultValues,
+      normalizeNodes(
+        shake(initialValues, (value) => value === null) as Record<string, any>
+      )
+    ),'''
+
+SUBSCRIBE_FORM_RESET = '''      assign(
+        defaultValues,
+        shake(initialValues, (value) => value === null) as Record<string, any>
+      )
+    );'''
+
+SUBSCRIBE_FORM_RESET_PATCHED = '''      assign(
+        defaultValues,
+        normalizeNodes(
+          shake(initialValues, (value) => value === null) as Record<string, any>
+        )
+      )
+    );'''
+
+SUBSCRIBE_FORM_HELPER_SIGNATURE = "function normalizeNodes(values: Record<string, any>)"
+
+SUBSCRIBE_FORM_CHECK = (
+    '                                      checked={value.includes(item.id!)}'
+)
+
+SUBSCRIBE_FORM_CHECK_PATCHED = '''                                      checked={value.some(
+                                        (v: number) =>
+                                          Number(v) === Number(item.id)
+                                      )}'''
+
+SUBSCRIBE_FORM_FILTER = '''                                              value.filter(
+                                                (value: number) =>
+                                                  value !== item.id
+                                              )'''
+
+SUBSCRIBE_FORM_FILTER_PATCHED = '''                                              value.filter(
+                                                (v: number) =>
+                                                  Number(v) !== Number(item.id)
+                                              )'''
+
+
+def patch_subscribe_form(root):
+    """Accept the string node ids and empty node groups the backend returns."""
+    marker = root / ".ppanel-subscribe-nodes-patched"
+    if marker.exists():
+        return
+
+    path = root / SUBSCRIBE_FORM
+    text = path.read_text(encoding="utf-8")
+
+    edits = (
+        ("const defaultValues = {", SUBSCRIBE_NORMALIZE_HELPER),
+        (SUBSCRIBE_FORM_DEFAULTS, SUBSCRIBE_FORM_DEFAULTS_PATCHED),
+        (SUBSCRIBE_FORM_RESET, SUBSCRIBE_FORM_RESET_PATCHED),
+        (SUBSCRIBE_FORM_CHECK, SUBSCRIBE_FORM_CHECK_PATCHED),
+        (SUBSCRIBE_FORM_FILTER, SUBSCRIBE_FORM_FILTER_PATCHED),
+    )
+    counts = [text.count(old) for old, _ in edits]
+
+    if SUBSCRIBE_FORM_HELPER_SIGNATURE in text:
+        # Upstream merged the same normalization; our patch is obsolete.
+        marker.write_text("1\n", encoding="utf-8")
+        return
+
+    for (old, _), count in zip(edits, counts):
+        if count != 1:
+            raise RuntimeError(
+                f"Upstream changed: expected 1 match for {old.splitlines()[0]!r} "
+                f"in {path}, found {count}. If upstream fixed the string node ids"
+                " another way, drop this patch instead of adapting it."
+            )
+
+    # Apply everything in memory so a failed match never leaves a half-patched file.
+    for old, new in edits:
+        text = text.replace(old, new)
+    path.write_text(text, encoding="utf-8")
+    marker.write_text("1\n", encoding="utf-8")
+
+
 ADMIN_AUTH_BLOCK = '''export function getRedirectUrl(): string {
   if (typeof window === "undefined") return "/dashboard";
   const params = new URLSearchParams(window.location.search);
@@ -82,6 +188,8 @@ export function Logout() {
 
 
 def patch(root):
+    patch_subscribe_form(root)
+
     manifest_marker = root / ".ppanel-admin-manifest-patched"
     if not manifest_marker.exists():
         replace(
