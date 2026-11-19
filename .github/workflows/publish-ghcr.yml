@@ -38,10 +38,14 @@ jobs:
 
       - name: Refresh upstream versions
         if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.refresh_upstream)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python3 scripts/update.py --resolve --backend latest --frontend latest --arch amd64
 
       - name: Prepare pinned upstream inputs
         if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && !inputs.refresh_upstream)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python3 scripts/update.py
 
       - name: Log in to GitHub Container Registry
