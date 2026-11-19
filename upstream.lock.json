@@ -2,24 +2,24 @@
   "schema": 1,
   "arch": "amd64",
   "backend": {
-    "tag": "v1.20.3",
-    "url": "https://github.com/perfect-panel/backend/releases/download/v1.20.3/ppanel-server-linux-amd64.tar.gz",
-    "sha256": "36be165955913c9a9a88096b5d29373ce153e6b6798c90fec4e54791946b6d32"
+    "tag": "v1.21.7",
+    "url": "https://github.com/perfect-panel/backend/releases/download/v1.21.7/ppanel-server-linux-amd64.tar.gz",
+    "sha256": "0b7d86e8be95b0b1542fbdac587e24d7648f58e3ca6844e5ac81a2bbddd5a757"
   },
   "frontend": {
-    "tag": "v1.22.0",
-    "commit": "008596377678da68be6505e83e7d6b207bb3e172",
-    "url": "https://codeload.github.com/perfect-panel/frontend/tar.gz/008596377678da68be6505e83e7d6b207bb3e172",
-    "sha256": "73690e442cce3cec018ee525a5d8baee162ce9fdd4957ddb7f87b96eb86399a1"
+    "tag": "v1.23.0",
+    "commit": "108d192634e56a3936530bff0fdd10164dd5bf1c",
+    "url": "https://codeload.github.com/perfect-panel/frontend/tar.gz/108d192634e56a3936530bff0fdd10164dd5bf1c",
+    "sha256": "8b3ad5bd3d825d15cebb08445c3e65479a5b864547f177a45d4f58b81b31b1cf"
   },
   "reference_frontend_assets": {
     "admin": {
-      "url": "https://github.com/perfect-panel/frontend/releases/download/v1.22.0/ppanel-admin-web.tar.gz",
-      "sha256": "8c7e9ce5c0a642f535c2646409eb82a341b1c6113cddf522225cc25deb772e54"
+      "url": "https://github.com/perfect-panel/frontend/releases/download/v1.23.0/ppanel-admin-web.tar.gz",
+      "sha256": "8fbd5365731a934d43daa6a51d6fc9f14a28abd493fc860676241060f1690d24"
     },
     "user": {
-      "url": "https://github.com/perfect-panel/frontend/releases/download/v1.22.0/ppanel-user-web.tar.gz",
-      "sha256": "14f0da0da135dd4f481c29b2852c4486d29b4d1acd3d47d160d6d70523f26547"
+      "url": "https://github.com/perfect-panel/frontend/releases/download/v1.23.0/ppanel-user-web.tar.gz",
+      "sha256": "c28d0a05b5644390ee9d53d455d1fc03cb94f726f5d8a93fcd47c3f4f2cc766f"
     }
   }
 }
